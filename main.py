@@ -73,7 +73,6 @@ genetic_code = {
 def translate_fasta_with_start(input_fasta, path):
 
     def clean_sequence(sequence, frame):
-
         # Shift the sequence to start from the given frame
         shifted_sequence = sequence[frame:]
         # Truncate sequence to a multiple of 3
@@ -86,15 +85,10 @@ def translate_fasta_with_start(input_fasta, path):
         translated_record_0 = record
         translated_record_1 = record
         translated_record_2 = record
-        # print(record.id)
-        # print("input sequence: " + record.seq)
-        # print("------------")
+
         clean_sequence0 = clean_sequence(record.seq, frame=0)
         clean_sequence1 = clean_sequence(record.seq, frame=1)
         clean_sequence2 = clean_sequence(record.seq, frame=2)
-        # print("cleaned sequence0: " + clean_sequence0)
-        # print("cleaned sequence1: " + clean_sequence1)
-        # print("cleaned sequence2: " + clean_sequence2)
 
         rna_sequence0 = clean_sequence0.upper().replace("T", "U")
         rna_sequence1 = clean_sequence1.upper().replace("T", "U")
@@ -122,20 +116,24 @@ def translate_fasta_with_start(input_fasta, path):
         for key, rna_sequence in rna_sequences.items():
             protein_sequences[key] = translate_rna_to_protein(rna_sequence)
 
-        # Output the protein sequences
-
-        # print(protein_sequences)
         protein_0 = protein_sequences["rna_sequence0"]
         protein_1 = protein_sequences["rna_sequence1"]
         protein_2 = protein_sequences["rna_sequence2"]
 
         translated_record_0.seq = protein_0
+
+        with open(f"{path}_0.fasta", "a") as output_handle_0:
+            SeqIO.write(translated_record_0, output_handle_0, "fasta")
+
         translated_record_1.seq = protein_1
+
+        with open(f"{path}_1.fasta", "a") as output_handle_1:
+            SeqIO.write(translated_record_1, output_handle_1, "fasta")
+
         translated_record_2.seq = protein_2
 
-        SeqIO.write(translated_record_0, f"{path}_0", "fasta")
-        SeqIO.write(translated_record_1, f"{path}_1", "fasta")
-        SeqIO.write(translated_record_2, f"{path}_2", "fasta")
+        with open(f"{path}_2.fasta", "a") as output_handle_2:
+            SeqIO.write(translated_record_2, output_handle_2, "fasta")
 
 
 # Define the input fasta files and corresponding output paths
