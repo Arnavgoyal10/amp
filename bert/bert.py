@@ -154,6 +154,11 @@ trainer = Trainer(
 trainer.train()
 
 
+# Save the trained model for later use
+model_dir = "bert/saved_model"
+trainer.save_model(model_dir)  # Save the model and tokenizer
+print(f"Model saved to {model_dir}")
+
 # performance metrics on the training data itself
 
 predictions, label_ids, metrics = trainer.predict(train_dataset)
