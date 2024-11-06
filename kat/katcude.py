@@ -1,73 +1,52 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from kat_rational import KAT_Group  # Importing KAT_Group from the repository
 from timm.models.vision_transformer import VisionTransformer
 from timm.models.layers import trunc_normal_
 
 
-# CUDA-Optimized Rational Activation Function
-# This function approximates complex non-linear functions using rational functions,
-# with CUDA-optimized computation.
-class RationalActivation(nn.Module):
-    def __init__(self):
-        super(RationalActivation, self).__init__()
-        # Numerator and denominator coefficients for rational activation function
-        self.p = nn.Parameter(torch.tensor([1.0, 0.0, 0.0, 0.0], device="cuda"))
-        self.q = nn.Parameter(torch.tensor([1.0, 0.0, 0.0], device="cuda"))
-
-    def forward(self, x):
-        # Compute rational function: numerator / denominator
-        numerator = self.p[0] + self.p[1] * x + self.p[2] * x**2 + self.p[3] * x**3
-        denominator = 1 + torch.abs(self.q[0] * x + self.q[1] * x**2 + self.q[2] * x**3)
-        return numerator / denominator
-
-
-# Group KAN Layer with Rational Activations
-# Implements grouped rational KAN layers for the KAT model, optimized for variance-preserving initialization.
+# Group KAN Layer using KAT_Group for activation
 class GroupKANLayer(nn.Module):
-    def __init__(self, in_features, out_features, num_groups=8):
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_cfg=None,
+        bias=True,
+        drop=0.0,
+    ):
         super(GroupKANLayer, self).__init__()
-        self.num_groups = num_groups
-        group_in_features = in_features // num_groups
-        group_out_features = out_features // num_groups
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
 
-        # Initialize grouped linear layers and rational activations
-        self.linears = nn.ModuleList(
-            [
-                nn.Linear(group_in_features, group_out_features).cuda()
-                for _ in range(num_groups)
-            ]
+        # Define linear layers and KAT_Group activations
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=bias).cuda()
+        self.act1 = (
+            KAT_Group(mode=act_cfg["act_init"][0]).cuda()
+            if act_cfg
+            else KAT_Group().cuda()
         )
-        self.activations = nn.ModuleList(
-            [RationalActivation() for _ in range(num_groups)]
+        self.drop1 = nn.Dropout(drop)
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=bias).cuda()
+        self.act2 = (
+            KAT_Group(mode=act_cfg["act_init"][1]).cuda()
+            if act_cfg
+            else KAT_Group().cuda()
         )
-
-        # Custom variance-preserving initialization
-        for linear in self.linears:
-            trunc_normal_(linear.weight, std=0.02)
-            nn.init.constant_(linear.bias, 0)
-        for activation in self.activations:
-            with torch.no_grad():
-                activation.p.fill_(1.0)  # Initialize p coefficients
-                activation.q.fill_(
-                    0.1
-                )  # Initialize q coefficients to stabilize denominator
+        self.drop2 = nn.Dropout(drop)
 
     def forward(self, x):
-        # Divide input into groups for group-wise transformations
-        group_inputs = torch.chunk(x, self.num_groups, dim=-1)
-        # Apply linear transformation and rational activation to each group
-        group_outputs = [
-            activation(linear(g_in))
-            for g_in, linear, activation in zip(
-                group_inputs, self.linears, self.activations
-            )
-        ]
-        return torch.cat(group_outputs, dim=-1)
+        x = self.fc1(x)
+        x = self.act1(x)
+        x = self.drop1(x)
+        x = self.fc2(x)
+        x = self.act2(x)
+        x = self.drop2(x)
+        return x
 
 
 # KAT Model for AMP Prediction using Group KAN Layers
-# This model modifies a Vision Transformer (ViT) to use grouped KAN layers with rational activations.
 class KATForAMP(VisionTransformer):
     def __init__(self, seq_length=100, embed_dim=768, num_classes=1, **kwargs):
         super().__init__(
@@ -88,13 +67,18 @@ class KATForAMP(VisionTransformer):
         trunc_normal_(self.pos_embed, std=0.02)
 
         # Replace MLP layers in transformer blocks with GroupKANLayer
+        act_cfg = dict(
+            type="KAT", act_init=["identity", "gelu"]
+        )  # Configure activation types
         self.blocks = nn.ModuleList(
             [
                 nn.ModuleDict(
                     {
                         "attention": block.attn,
                         "norm1": block.norm1,
-                        "group_kan": GroupKANLayer(embed_dim, embed_dim),
+                        "group_kan": GroupKANLayer(
+                            embed_dim, hidden_features=embed_dim, act_cfg=act_cfg
+                        ),
                         "norm2": block.norm2,
                     }
                 )
@@ -111,44 +95,27 @@ class KATForAMP(VisionTransformer):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        # Initialize weights, including custom variance-preserving for GroupKANLayer
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.Embedding):
             nn.init.uniform_(m.weight, -0.05, 0.05)
-        elif isinstance(m, GroupKANLayer):
-            for linear in m.linears:
-                trunc_normal_(linear.weight, std=0.02)
-                if linear.bias is not None:
-                    nn.init.constant_(linear.bias, 0)
 
     def forward_features(self, x):
-        # Embed sequence data for amino acids
-        x = self.embedding(x).cuda()  # Shape: [batch_size, seq_length, embed_dim]
-        cls_tokens = self.cls_token.expand(
-            x.size(0), -1, -1
-        )  # Class token for each batch
-        x = torch.cat(
-            (cls_tokens, x), dim=1
-        )  # Shape: [batch_size, seq_length + 1, embed_dim]
+        x = self.embedding(x).cuda()
+        cls_tokens = self.cls_token.expand(x.size(0), -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        x = x + self.pos_embed[:, : x.size(1), :]
 
-        # Add positional embedding
-        pos_embed = self.pos_embed[:, : x.size(1), :]
-        x = x + pos_embed
-
-        # Transformer blocks
         for block in self.blocks:
             x = block["attention"](block["norm1"](x)) + x
             x = block["group_kan"](block["norm2"](x)) + x
 
-        # Layer normalization on the class token
         x = self.norm(x)
         return x[:, 0]
 
     def forward(self, x):
-        # Forward pass through features and classification head
         x = self.forward_features(x)
         return self.head(x).squeeze(-1)
 
