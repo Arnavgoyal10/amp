@@ -97,7 +97,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = create_kat_amp_model(
     seq_length=max_seq_length, embed_dim=768, num_classes=1
 )  # Set max sequence length
-model.to(device)
+model.to(device)  # Move model to GPU if available
 
 # Define loss function, optimizer, and learning rate scheduler
 criterion = nn.BCEWithLogitsLoss()  # Binary cross-entropy for binary classification
@@ -130,7 +130,7 @@ for epoch in range(num_epochs):
     val_loss = 0.0
     with torch.no_grad():  # No gradients needed for validation
         for inputs, labels in val_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
+            inputs, labels = inputs.to(device), labels.to(device)  # Move data to device
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             val_loss += loss.item()
@@ -138,6 +138,9 @@ for epoch in range(num_epochs):
     print(
         f"Epoch {epoch+1}, Train Loss: {running_loss/len(train_loader)}, Val Loss: {val_loss/len(val_loader)}"
     )
+
+    # Save weights to CSV after each epoch
+    model.save_weights_to_csv(f"weights_epoch_{epoch+1}.csv")
 
 # Save the trained model
 # The model's state dictionary is saved to a file for later evaluation or deployment.
