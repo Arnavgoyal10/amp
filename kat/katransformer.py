@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.vision_transformer import VisionTransformer
 from timm.models.layers import trunc_normal_
+import pandas as pd  # Add this import for CSV functionality
 
 
 # Custom Rational Activation Function (as a substitute for KAN layer rational functions)
@@ -71,7 +72,7 @@ class KATForAMP(VisionTransformer):
             in_chans=1,  # Single integer channel per amino acid
             embed_dim=embed_dim,
             num_classes=num_classes,
-            **kwargs
+            **kwargs,
         )
 
         # AMP Sequence Embedding
@@ -162,6 +163,23 @@ class KATForAMP(VisionTransformer):
         x = self.forward_features(x)
         x = self.head(x).squeeze(-1)  # Output shape: [batch_size]
         return x
+
+    def save_weights_to_csv(self, filename="weights.csv"):
+        # Collect weights from all linear layers in GroupKANLayer
+        weights = {}
+        for i, block in enumerate(self.blocks):
+            for j, linear in enumerate(block["group_kan"].linears):
+                weights[f"block_{i}_group_{j}_weights"] = (
+                    linear.weight.data.cpu().numpy().flatten()
+                )
+                if linear.bias is not None:
+                    weights[f"block_{i}_group_{j}_bias"] = (
+                        linear.bias.data.cpu().numpy().flatten()
+                    )
+
+        # Convert weights dictionary to DataFrame and save to CSV
+        weights_df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in weights.items()]))
+        weights_df.to_csv(filename, index=False)
 
 
 # Instantiate the Model

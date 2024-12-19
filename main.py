@@ -140,20 +140,20 @@ def translate_fasta_with_start(input_fasta, path):
 inputs = [
     (
         "data/Drosophila_melanogaster/GCF_000001215.4_Release_6_plus_ISO1_MT_genomic.fna",
-        "data/Drosophila_melanogaster/output_amino",
+        "data1/Drosophila_melanogaster/output_amino",
     ),
     (
         "data/eastern_oyster/GCF_002022765.2_C_virginica-3.0_genomic.fna",
-        "data/eastern_oyster/output.amino",
+        "data1/eastern_oyster/output.amino",
     ),
-    ("data/Human/GCF_000001405.40_GRCh38.p14_genomic.fna", "data/Human/output.amino"),
+    ("data/Human/GCF_000001405.40_GRCh38.p14_genomic.fna", "data1/Human/output.amino"),
     (
         "data/lion/GCF_018350215.1_P.leo_Ple1_pat1.1_genomic.fna",
-        "data/lion/output.amino",
+        "data1/lion/output.amino",
     ),
     (
         "data/zebra_fish/GCF_000002035.6_GRCz11_genomic.fna",
-        "data/zebra_fish/output.amino",
+        "data1/zebra_fish/output.amino",
     ),
 ]
 
