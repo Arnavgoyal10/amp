@@ -46,15 +46,15 @@ def protein_to_rna(protein_sequence):
 
 
 def process_output_file(input_file, output_folder):
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    # Create the output folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
 
     with open(input_file, "r") as file:
-        counter = 0
+        # counter = 0
         for record in SeqIO.parse(file, "fasta"):
-            if counter != 1:
-                counter += 1
-                continue
+            # if counter != 1:
+            #     counter += 1
+            #     continue
 
             protein_sequence = str(record.seq).replace("*", "")  # Remove asterisks
             rna_sequences = protein_to_rna(protein_sequence)
@@ -74,16 +74,13 @@ def process_output_file(input_file, output_folder):
 def main():
     inputs = [
         (
-            "output/Drosophila_melanogaster/output_final.fasta",
-            "final/Drosophila_melanogaster",
+            "AMPs_nonAMPs_data/AMPs/AMPs.fa",
+            "final/AMPs",
         ),
-        # (
-        #     "output/eastern_oyster/output_final.fasta",
-        #     "final/eastern_oyster",
-        # ),
-        # ("output/Human/output_final.fasta", "final/Human"),
-        # ("output/lion/output_final.fasta", "final/lion"),
-        # ("output/zebra_fish/output_final.fasta", "final/zebra_fish"),
+        (
+            "AMPs_nonAMPs_data/NonAMPs/NonAMPs.fa",
+            "final/NonAMPs",
+        ),
     ]
 
     with multiprocessing.Pool() as pool:
